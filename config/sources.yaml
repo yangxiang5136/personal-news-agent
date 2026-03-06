@@ -1,0 +1,23 @@
+# News Agent — Source Configuration
+# Which adapters are active and their settings
+
+active_sources:
+  - adapter: rss
+    config:
+      feeds:
+        # AI / ML
+        - "https://hnrss.org/newest?points=100"
+        - "https://arxiv.org/rss/cs.AI"
+        - "https://arxiv.org/rss/cs.HC"
+        # Design
+        - "https://feeds.feedburner.com/AListApart"
+        # Tech / Infra
+        - "https://blog.railway.app/feed.xml"
+      max_per_feed: 10
+    enabled: true
+
+  # World Monitor adapter — enable after deploying WM
+  # - adapter: worldmonitor
+  #   config:
+  #     base_url: "https://your-wm.vercel.app"
+  #   enabled: false

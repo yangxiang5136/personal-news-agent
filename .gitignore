@@ -1,0 +1,14 @@
+# Output directory (agent writes here, don't commit)
+output/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment
+.env
+
+# OS
+.DS_Store
