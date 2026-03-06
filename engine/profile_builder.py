@@ -295,7 +295,7 @@ def build_profile(aspect_profiles, surprise_themes, emerging, direction, rubric,
         top_memos.extend(profile["top_memos"][:2])
 
     current_summary = (
-        f"Currently focused on {len(memory_stats['total_memories'])} captured thoughts "
+        f"Currently focused on {memory_stats['total_memories']} captured thoughts "
         f"across {memory_stats['aspects_analyzed']} aspects. "
         f"Strongest aspects: {', '.join(aspect_summaries[:3])}. "
     ) if isinstance(memory_stats.get('total_memories'), int) else (
