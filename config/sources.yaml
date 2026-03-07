@@ -1,5 +1,5 @@
-# News Agent — Source Configuration
-# Which adapters are active and their settings
+# News Agent — Source Configuration v2
+# Bilingual feeds: English + Chinese (more languages coming)
 
 active_sources:
   - adapter: rss
@@ -16,8 +16,56 @@ active_sources:
       max_per_feed: 10
     enabled: true
 
-  # World Monitor adapter — enable after deploying WM
+  - adapter: rss_cn
+    config:
+      feeds:
+        # AI / Technology
+        - "https://www.jiqizhixin.com/rss"       # 机器之心
+        - "https://www.qbitai.com/feed"            # 量子位
+        - "https://36kr.com/feed"                  # 36氪
+        - "https://sspai.com/feed"                 # 少数派
+        # Design
+        - "https://www.uisdc.com/feed"             # 优设
+        # Business
+        - "https://www.huxiu.com/rss/0.xml"        # 虎嗅
+        # Developer
+        - "https://www.oschina.net/news/rss"       # 开源中国
+        - "https://www.infoq.cn/feed"              # InfoQ CN
+      max_per_feed: 10
+    enabled: true
+
+  # World Monitor adapter — enable after connecting
   # - adapter: worldmonitor
   #   config:
   #     base_url: "https://your-wm.vercel.app"
   #   enabled: false
+
+# --- Future language tiers ---
+# Phase C: Japanese
+#  - adapter: rss_global
+#    lang: ja
+#    feeds: [ITmedia, GIGAZINE, Publickey, TechCrunch JP]
+#
+# Phase D: Korean + European
+#  - adapter: rss_global
+#    lang: ko
+#    feeds: [AI Times KR, ZDNet Korea, Bloter]
+#  - adapter: rss_global
+#    lang: de
+#    feeds: [Heise, t3n, Golem.de]
+#  - adapter: rss_global
+#    lang: fr
+#    feeds: [Le Monde Tech, L'Usine Digitale]
+
+# --- LLM Configuration ---
+llm:
+  layer1:
+    provider: deepseek        # or "anthropic" as fallback
+    model: deepseek-chat
+    base_url: https://api.deepseek.com
+    env_key: DEEPSEEK_API_KEY
+
+  layer2:
+    provider: anthropic
+    model: claude-haiku-4-5-20251001
+    env_key: ANTHROPIC_API_KEY
