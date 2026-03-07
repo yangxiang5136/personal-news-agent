@@ -304,6 +304,22 @@ function endCard(total) {
 // ── Interactions ──
 let feedItems = [];
 
+// ── Save reaction to server ──
+function saveReaction(id, action, active) {
+  const item = feedItems.find(i => i.id === id);
+  fetch('/api/reactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      item_id: id,
+      action: action,
+      active: active,
+      title: item ? (item.translated_title || item.title || '') : '',
+      source: item ? (item.source_name || '') : ''
+    })
+  }).catch(e => console.log('Reaction save failed:', e));
+}
+
 function toggleReaction(id, type, btn) {
   if (!reactions[id]) reactions[id] = [];
   const idx = reactions[id].indexOf(type);
@@ -316,6 +332,7 @@ function toggleReaction(id, type, btn) {
     if (type === 'save') { span.textContent = '☆'; span.style.color = '#fbbf24'; }
     if (type === 'connect') span.style.color = '#a78bfa';
     if (type === 'share') span.style.color = '#34d399';
+    saveReaction(id, type, false);
   } else {
     reactions[id].push(type);
     btn.classList.add('active');
@@ -324,6 +341,7 @@ function toggleReaction(id, type, btn) {
     if (type === 'save') { span.textContent = '★'; span.style.color = '#ffd700'; }
     if (type === 'connect') span.style.color = '#c4b5fd';
     if (type === 'share') span.style.color = '#6ee7b7';
+    saveReaction(id, type, true);
   }
   updateEndCard();
 }
@@ -357,6 +375,7 @@ function openReader(id) {
   if (!reactions[id].includes('read')) reactions[id].push('read');
   const btn = document.querySelector(`[data-action="read"][data-id="${id}"]`);
   if (btn) { btn.classList.add('active'); btn.querySelector('span').style.color = '#60a5fa'; }
+  saveReaction(id, 'read', true);
 
   // Show reader
   const reader = document.createElement('div');
@@ -470,6 +489,33 @@ async function init() {
   // Log
   const arch = feed.architecture || '';
   console.log(`Briefing loaded: ${total} items | ${arch}`);
+
+  // Load saved reactions from server
+  try {
+    const rxResp = await fetch('/api/reactions');
+    const rxData = await rxResp.json();
+    if (rxData.reactions && rxData.reactions.length) {
+      rxData.reactions.forEach(r => {
+        const id = r.item_id;
+        const type = r.action;
+        if (!reactions[id]) reactions[id] = [];
+        if (!reactions[id].includes(type)) reactions[id].push(type);
+        // Restore button visual state
+        const btn = document.querySelector(`[data-action="${type}"][data-id="${id}"]`);
+        if (btn) {
+          const span = btn.querySelector('span');
+          btn.classList.add('active');
+          if (type === 'like') { span.textContent = '♥'; span.style.color = '#ff4466'; }
+          if (type === 'save') { span.textContent = '★'; span.style.color = '#ffd700'; }
+          if (type === 'read') span.style.color = '#60a5fa';
+          if (type === 'connect') span.style.color = '#c4b5fd';
+          if (type === 'share') span.style.color = '#6ee7b7';
+        }
+      });
+      updateEndCard();
+      console.log(`Restored ${rxData.reactions.length} reactions`);
+    }
+  } catch (e) { console.log('Could not load reactions:', e); }
 }
 
 // Go

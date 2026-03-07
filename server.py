@@ -157,11 +157,27 @@ class NewsAgentHandler(SimpleHTTPRequestHandler):
             self._trigger_refresh()
         elif self.path == "/api/status":
             self._serve_status()
+        elif self.path == "/api/reactions":
+            self._serve_reactions()
         elif self.path == "/" or self.path == "":
             self.path = "/index.html"
             super().do_GET()
         else:
             super().do_GET()
+
+    def do_POST(self):
+        if self.path == "/api/reactions":
+            self._save_reaction()
+        else:
+            self._json_response(404, {"error": "Not found"})
+
+    def do_OPTIONS(self):
+        # CORS preflight
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
 
     def _serve_json(self, path):
         if not os.path.exists(path):
@@ -190,6 +206,86 @@ class NewsAgentHandler(SimpleHTTPRequestHandler):
     def _serve_status(self):
         self._json_response(200, pipeline_status)
 
+    def _save_reaction(self):
+        """Save a reaction from the UI."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = json.loads(body)
+
+            item_id = data.get("item_id", "")
+            action = data.get("action", "")
+            active = data.get("active", True)
+            item_title = data.get("title", "")
+            item_source = data.get("source", "")
+            timestamp = datetime.now().isoformat()
+
+            if not item_id or not action:
+                self._json_response(400, {"error": "item_id and action required"})
+                return
+
+            # Reaction weights for the feedback loop
+            weights = {
+                "like": 3, "read": 4, "save": 5,
+                "share": 6, "connect": 7, "react": 10,
+            }
+
+            reaction = {
+                "item_id": item_id,
+                "action": action,
+                "active": active,
+                "weight": weights.get(action, 0) if active else -weights.get(action, 0),
+                "timestamp": timestamp,
+                "title": item_title,
+                "source": item_source,
+            }
+
+            # Append to today's reaction file
+            reactions_dir = "output/reactions"
+            os.makedirs(reactions_dir, exist_ok=True)
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            reactions_path = os.path.join(reactions_dir, f"{date_str}.json")
+
+            reactions = []
+            if os.path.exists(reactions_path):
+                with open(reactions_path, "r") as f:
+                    reactions = json.load(f)
+
+            # Update existing or append
+            existing = None
+            for i, r in enumerate(reactions):
+                if r["item_id"] == item_id and r["action"] == action:
+                    existing = i
+                    break
+
+            if existing is not None:
+                if active:
+                    reactions[existing] = reaction
+                else:
+                    reactions.pop(existing)
+            elif active:
+                reactions.append(reaction)
+
+            with open(reactions_path, "w") as f:
+                json.dump(reactions, f, indent=2)
+
+            print(f"  Reaction: {'+' if active else '-'}{action} on {item_id[:12]}...")
+            self._json_response(200, {"saved": True, "total_reactions": len(reactions)})
+
+        except Exception as e:
+            self._json_response(500, {"error": str(e)})
+
+    def _serve_reactions(self):
+        """Return today's reactions."""
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        reactions_path = os.path.join("output", "reactions", f"{date_str}.json")
+        if os.path.exists(reactions_path):
+            with open(reactions_path, "r") as f:
+                reactions = json.load(f)
+            self._json_response(200, {"date": date_str, "reactions": reactions, "count": len(reactions)})
+        else:
+            self._json_response(200, {"date": date_str, "reactions": [], "count": 0})
+
     def _json_response(self, code, data):
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -206,6 +302,7 @@ class NewsAgentHandler(SimpleHTTPRequestHandler):
 def main():
     os.makedirs(UI_DIR, exist_ok=True)
     os.makedirs("output", exist_ok=True)
+    os.makedirs("output/reactions", exist_ok=True)
 
     if not os.path.exists(os.path.join(UI_DIR, "index.html")):
         print(f"  ERROR: {UI_DIR}/index.html not found")
@@ -218,6 +315,7 @@ def main():
     server = HTTPServer(("0.0.0.0", PORT), NewsAgentHandler)
     print(f"\n  ✦ News Agent running at http://localhost:{PORT}")
     print(f"  ✦ Feed API:    /api/feed")
+    print(f"  ✦ Reactions:   /api/reactions (GET/POST)")
     print(f"  ✦ Refresh:     /api/refresh")
     print(f"  ✦ Status:      /api/status")
     print(f"  ✦ Auto-refresh every {REFRESH_INTERVAL // 3600}h")
