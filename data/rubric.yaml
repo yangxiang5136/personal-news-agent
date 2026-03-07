@@ -1,0 +1,274 @@
+# Digital Me — Scoring Rubric
+# This file defines how memories are evaluated across aspects.
+# It is the most stable layer of the system — modify deliberately.
+# History of changes is tracked in rubric_history/
+
+rubric_version: "1.1"
+created: "2026-02-16"
+last_modified: "2026-02-16"
+
+# Scoring methodology:
+# - Each memory is scored 0.0 to 1.0 on EVERY aspect independently
+# - Scores are absolute, not proportional (a memory can score 0.8 on two aspects)
+# - 0.0 means no relevance; 1.0 means the memory is fundamentally about this aspect
+# - When in doubt, score lower — inflation reduces the signal value of high scores
+# - Aspects can be added, merged, split, or retired over time with user approval
+#
+# Preserving ambiguity:
+# - Scores are pointers, not summaries. The original memory is always the source of truth.
+# - Every score is accompanied by a memo explaining why that score was given.
+#   The memo captures reasoning, hesitation, and nuance that the number flattens.
+# - Every score has a confidence level (high, medium, low) indicating how certain
+#   the scoring is. Low confidence flags where the rubric boundaries are fuzzy.
+# - Boundary notes are added when a memory genuinely sits between two aspects
+#   and forcing a clean score would misrepresent the content.
+#
+# Output format for each scored memory:
+#
+#   aspects:
+#     Projects:
+#       score: 0.6
+#       confidence: high
+#       memo: "Discusses deployment architecture for the sync feature"
+#     Principles:
+#       score: 0.7
+#       confidence: low
+#       memo: "The real energy is about discovering that cloud hosting
+#         changes the privacy equation — could be more about Ideas"
+#   boundary_notes:
+#     - "This memory lives between Principles and Ideas — it's an insight
+#        that might be becoming a guiding belief but hasn't solidified yet.
+#        Revisit after more related memories accumulate."
+
+aspects:
+
+  Projects:
+    definition: >
+      A concrete initiative with a goal, steps, and deliverables.
+      Must have or imply an implementation path — not just a wish or curiosity.
+      Includes technical builds, system design, and project-level decisions.
+    scoring_guide:
+      0.0: "No connection to any buildable initiative"
+      0.2: "Tangentially inspired by or loosely related to a project"
+      0.4: "References a project context but the core thought is about something else"
+      0.6: "Directly discusses a project — a feature, blocker, or implementation choice"
+      0.8: "Core project thinking — architecture decisions, technical design, problem-solving within a build"
+      1.0: "Defines, launches, or fundamentally redirects a project"
+    inclusion_examples:
+      - memory: "Decided to use Groq instead of OpenAI for voice transcription because of ZDR privacy"
+        score: 0.8
+        confidence: high
+        memo: "Clear architecture decision within an active project with explicit reasoning"
+      - memory: "The connection mapper should output to a connections/ subfolder"
+        score: 0.6
+        confidence: high
+        memo: "Implementation detail for an active project, straightforward to score"
+      - memory: "What if I could build an AI that talks to my friends' AIs"
+        score: 0.4
+        confidence: medium
+        memo: "Project-adjacent idea but no implementation path yet — could be Ideas instead"
+    exclusion_examples:
+      - memory: "Feeling energized after a productive day"
+        score: 0.0
+        memo: "No project content even if the feeling was caused by project work"
+      - memory: "Read an article about how startups use AI"
+        score: 0.1
+        memo: "General reading, not tied to a specific build unless it triggered a decision"
+
+  Principles:
+    definition: >
+      Core beliefs, design philosophies, and values that guide decisions.
+      These are the "why" behind choices — privacy-first, vendor independence,
+      human-in-the-loop, future-proofing. Includes both explicitly stated
+      principles and moments where a principle is being applied or discovered.
+    scoring_guide:
+      0.0: "No philosophical, ethical, or design principle content"
+      0.2: "Lightly touches a value without examining it"
+      0.4: "Applies a known principle to a specific situation without deepening understanding"
+      0.6: "Explicitly articulates or defends a principle — explains why something matters"
+      0.8: "Refines, challenges, or evolves an existing principle based on new experience"
+      1.0: "Discovers or formulates a new guiding principle"
+    inclusion_examples:
+      - memory: "AI agents should extend ability, not replace judgment — the human must stay in the loop"
+        score: 0.9
+        confidence: high
+        memo: "Core principle articulation that guides the entire project"
+      - memory: "Using environment variables for API keys so I can swap providers without code changes"
+        score: 0.5
+        confidence: medium
+        memo: "Applying vendor independence principle but the focus is on implementation — the principle is present but secondary"
+      - memory: "The rubric is the real IP, not the code — anyone can copy architecture but not self-understanding"
+        score: 1.0
+        confidence: high
+        memo: "Formulation of a new guiding insight about what creates unique value"
+    exclusion_examples:
+      - memory: "Set up cron job for hourly sync"
+        score: 0.0
+        memo: "Pure implementation, no principle content"
+      - memory: "Telegram bot is convenient for quick input"
+        score: 0.1
+        memo: "Preference, not a principle"
+
+  Ideas:
+    definition: >
+      Raw concepts, hypotheses, or creative sparks that have not yet become
+      projects or principles. The space between curiosity and commitment.
+      Includes speculative thinking, what-if scenarios, and early-stage
+      brainstorming. An idea graduates out of this aspect when it becomes
+      a project (gains implementation path) or a principle (becomes a guiding belief).
+      An idea graduates to a Project once it has a specific implementation path, 
+      timeline, or deliverable. If you could put it on a todo list, it's probably 
+      a Project.
+    scoring_guide:
+      0.0: "No novel concept or creative spark"
+      0.2: "Slight creative tangent within an otherwise routine thought"
+      0.4: "An interesting observation that could lead somewhere but is not developed"
+      0.6: "A clear idea with some exploration — asking what if, imagining possibilities"
+      0.8: "A well-articulated original concept with multiple angles explored"
+      1.0: "A breakthrough insight or paradigm-shifting idea that reframes how I think about something"
+    inclusion_examples:
+      - memory: "What if different friends got different types of updates from my AI based on relationship type"
+        score: 0.7
+        confidence: high
+        memo: "Creative concept with specificity but not yet a project or principle"
+      - memory: "Memory scoring should work like neural synaptic strength — but wait, does the efficiency argument even apply here?"
+        score: 0.8
+        confidence: high
+        memo: "Idea explored and critically examined in real time — the self-correction adds depth"
+    exclusion_examples:
+      - memory: "Deployed bot to Railway successfully"
+        score: 0.0
+        memo: "Execution, not ideation"
+      - memory: "I should try using Notion for organizing connections"
+        score: 0.3
+        confidence: low
+        memo: "More of a tool preference than a creative concept — but could be scored higher if the thought explored why Notion specifically"
+
+  Relationships:
+    definition: >
+      Thinking about social connections, communication, collaboration,
+      and how I relate to other people. Includes friendship dynamics,
+      sharing and privacy boundaries with others, how to communicate ideas,
+      and understanding different relationship types and their functions.
+    scoring_guide:
+      0.0: "No social or relational content"
+      0.2: "Mentions another person in passing without reflecting on the relationship"
+      0.4: "Considers how to share or communicate something with others"
+      0.6: "Reflects on relationship dynamics, social patterns, or communication strategies"
+      0.8: "Deep thinking about friendship structures, trust, or how relationships function"
+      1.0: "Fundamental insight about human connection that reshapes how I approach relationships"
+    inclusion_examples:
+      - memory: "Different friendship types serve different functions — emotional support vs intellectual stimulation vs practical help"
+        score: 0.9
+        confidence: high
+        memo: "Structural insight about relationship categories that directly shapes agent design"
+      - memory: "Shared my AI project with friends who are interested in tech"
+        score: 0.4
+        confidence: medium
+        memo: "Social action but light on relational reflection — could be 0.3 or 0.5 depending on whether the sharing itself was the point"
+    exclusion_examples:
+      - memory: "Built the voice transcription feature"
+        score: 0.0
+        memo: "Solo technical work with no social dimension"
+
+  Learning:
+    definition: >
+      Acquiring new skills, knowledge, or understanding. Includes both
+      technical learning (new tools, languages, frameworks) and conceptual
+      learning (new mental models, domains of knowledge). Also includes
+      metacognition — learning about how I learn.
+    scoring_guide:
+      0.0: "No learning or skill development content"
+      0.2: "Encountered something new but did not engage with it"
+      0.4: "Learned a specific fact or technique in service of another goal"
+      0.6: "Actively studied or practiced something — deliberate skill building"
+      0.8: "Gained significant new understanding that changes how I approach a domain"
+      1.0: "Mastered a new capability or had a learning breakthrough that opens new possibilities"
+    inclusion_examples:
+      - memory: "Learned how cron jobs work on Mac to set up the hourly sync"
+        score: 0.5
+        confidence: high
+        memo: "Practical skill acquired but in service of a project task — learning was a means not the end"
+      - memory: "Understanding thematic analysis methodology — codebooks, anchor points, inclusion/exclusion criteria"
+        score: 0.7
+        confidence: high
+        memo: "New conceptual framework being actively absorbed and applied"
+      - memory: "Realized that qualitative research methods apply directly to personal knowledge management"
+        score: 0.8
+        confidence: medium
+        memo: "Cross-domain insight that changes approach — medium confidence because it could also be Ideas or Principles"
+    exclusion_examples:
+      - memory: "Used git push to update the repo"
+        score: 0.1
+        memo: "Using an existing skill, not learning"
+
+  Growth:
+    definition: >
+      Personal development, self-reflection, and evolving self-understanding.
+      Includes emotional awareness, mindset shifts, recognizing patterns in
+      my own behavior, and intentional self-improvement. This is the meta-aspect —
+      it captures moments where I am not just thinking about something
+      but thinking about how I think, who I am becoming, and what I want from life.
+    scoring_guide:
+      0.0: "No self-reflective or personal development content"
+      0.2: "Brief emotional note or mood observation without deeper reflection"
+      0.4: "Recognizes a personal pattern or preference with mild self-awareness"
+      0.6: "Reflects meaningfully on personal strengths, weaknesses, or behavioral patterns"
+      0.8: "Articulates a mindset shift or personal breakthrough — sees something about self differently"
+      1.0: "Transformative self-insight that fundamentally changes self-understanding or life direction"
+    inclusion_examples:
+      - memory: "I chose the structured approach because I have good self-awareness and want to stay in the loop — outsourcing structure means outsourcing self-understanding"
+        score: 0.8
+        confidence: high
+        memo: "Self-aware reasoning about own cognitive style that led to a concrete design decision — the self-knowledge directly shaped action"
+      - memory: "The fundamental reason I created this project is to help me improve myself"
+        score: 0.7
+        confidence: high
+        memo: "Articulating core motivation and purpose clearly"
+      - memory: "I prefer experimenting with multiple approaches before committing to one"
+        score: 0.5
+        confidence: medium
+        memo: "Recognizing a personal pattern — medium confidence because it's stated as fact rather than examined"
+    exclusion_examples:
+      - memory: "Fixed a bug in the bot code"
+        score: 0.0
+        memo: "Technical task with no self-reflection"
+      - memory: "Today was a good day"
+        score: 0.2
+        memo: "Emotional note but no reflection on why or what it means"
+
+# Meta-rules for the scoring system:
+#
+# 1. Scores are pointers, not summaries. The original memory text is always
+#    the source of truth. Never interpret a score without reading the source.
+#
+# 2. Every score must include a memo explaining the reasoning. The memo captures
+#    nuance, hesitation, and ambiguity that the number cannot represent.
+#    A score without a memo is incomplete.
+#
+# 3. Every score must include a confidence level (high, medium, low).
+#    Low confidence flags where the rubric boundaries are fuzzy and may
+#    need refinement. Patterns of low confidence on the same aspect suggest
+#    the definition or scoring guide needs updating.
+#
+# 4. When a memory genuinely sits on the boundary between aspects, add a
+#    boundary_note rather than forcing artificial precision. Boundary notes
+#    are valuable data about where the rubric needs evolution.
+#
+# 5. When a memory could score on multiple aspects, score all of them
+#    independently. Multi-aspect memories are the norm, not the exception.
+#
+# 6. Prefer under-scoring to over-scoring. High scores should feel earned.
+#    Inflation reduces the signal value and makes clustering less useful.
+#
+# 7. A memory with all scores below 0.3 may indicate a new aspect is emerging.
+#    Flag these for review and suggest potential new aspect names.
+#
+# 8. If many memories cluster high on one aspect, consider whether it should
+#    split into two more specific aspects.
+#
+# 9. Review this rubric after every 20-30 new memories to check if aspects
+#    need updating, definitions need tightening, or new aspects should be added.
+#
+# 10. All rubric changes are logged in rubric_history/ with a timestamp,
+#     description of the change, and the reasoning behind it.

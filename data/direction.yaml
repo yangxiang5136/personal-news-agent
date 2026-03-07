@@ -1,0 +1,34 @@
+# Direction File — Digital Me
+# What I'm moving toward, not who I am now.
+# This file is ONLY written by me (Sean), never auto-generated.
+# Agents read this to understand my trajectory, not just my current state.
+# Update whenever it feels wrong. No schedule required.
+
+version: "1.0"
+last_updated: "2026-02-18"
+
+# --- Where I'm headed ---
+
+growing_toward:
+  - "Thinking deeper before building — going from interesting idea to 
+     clear enough understanding that I know what to build and why"
+  - "Making things that other people actually use, not just prototypes 
+     that prove a concept to myself"
+  - "Exploring design, aesthetics, and creativity — learning to think 
+     in ways that aren't purely engineering-driven"
+
+# --- What I'm trying to break ---
+
+growing_away_from:
+  - "Generating many ideas but staying shallow on all of them — 
+     I want fewer ideas taken further"
+  - "Jumping to implementation before I've really understood 
+     the problem at the level that matters"
+
+# --- Questions I want to keep asking myself ---
+
+blind_spot_watch:
+  - "Am I going deep on one idea this week, or scattering again?"
+  - "Have I spent time on something non-technical recently?"
+  - "Am I building for myself or for someone who'd actually use this?"
+  - "What would a designer think about what I'm making?"

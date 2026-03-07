@@ -123,7 +123,7 @@
   .loading { height: 100dvh; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 12px; }
   .loading-text { color: rgba(255,255,255,0.3); font-family: monospace; font-size: 13px; }
-  .loading-sub { color: rgba(255,255,255,0.15); font-size: 11px; }
+  .loading-sub { color: rgba(255,255,255,0.35); font-size: 11px; }
 
   /* Swipe hint */
   .swipe-hint { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
@@ -411,10 +411,26 @@ async function init() {
     feed = await resp.json();
     if (feed.error) throw new Error(feed.error);
   } catch (e) {
+    // Check if pipeline is running
+    try {
+      const statusResp = await fetch('/api/status');
+      const status = await statusResp.json();
+      if (status.running) {
+        app.innerHTML = `<div class="loading">
+          <div class="loading-text">Generating your briefing...</div>
+          <div class="loading-sub" style="color:rgba(255,255,255,0.35)">Pipeline is scoring news. This takes 1-2 minutes.</div>
+        </div>`;
+        // Retry every 10 seconds
+        setTimeout(init, 10000);
+        return;
+      }
+    } catch (se) {}
     app.innerHTML = `<div class="loading">
       <div class="loading-text">No feed data</div>
-      <div class="loading-sub">${e.message || 'Run python run.py first'}</div>
+      <div class="loading-sub" style="color:rgba(255,255,255,0.35)">${e.message || 'Run python run.py first'}</div>
+      <div class="loading-sub" style="color:rgba(255,255,255,0.25);margin-top:8px">Retrying in 15s...</div>
     </div>`;
+    setTimeout(init, 15000);
     return;
   }
 
