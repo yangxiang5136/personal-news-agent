@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Daily Briefing</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #000; color: #fff; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased; }
+
+  /* Feed container */
+  .feed { height: 100dvh; overflow-y: scroll; scroll-snap-type: y mandatory;
+    -webkit-overflow-scrolling: touch; max-width: 430px; margin: 0 auto; }
+  .feed::-webkit-scrollbar { display: none; }
+
+  /* Card base */
+  .card { height: 100dvh; width: 100%; scroll-snap-align: start;
+    position: relative; display: flex; flex-direction: column; background: #000; }
+
+  /* Header (always top) */
+  .card-header { padding: 16px 50px 0 16px; flex-shrink: 0; }
+  .card-meta { font-size: 10px; color: rgba(255,255,255,0.45); font-family: 'SF Mono', SFMono-Regular, monospace;
+    letter-spacing: 0.5px; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; }
+  .card-meta .tag { opacity: 0.9; }
+  .card-meta .sep { opacity: 0.3; }
+  .card-title { font-size: 21px; font-weight: 600; color: #fff; line-height: 1.3;
+    margin-bottom: 7px; letter-spacing: -0.3px; }
+  .card-rationale { font-size: 12px; line-height: 1.45; margin: 0; opacity: 0.85; }
+
+  /* Text card body */
+  .text-body { flex: 1; overflow: auto; padding: 12px 50px 16px 16px; }
+  .text-body p { font-size: 15px; color: rgba(255,255,255,0.7); line-height: 1.72; margin-bottom: 10px; }
+
+  /* Image area */
+  .image-area { flex: 1; margin: 10px 16px 14px; border-radius: 10px; overflow: hidden;
+    position: relative; background: #0a0a0a; min-height: 0; }
+  .image-bg { position: absolute; inset: 0; background-size: cover; background-position: center;
+    transition: opacity 0.5s; }
+  .image-gradient { position: absolute; bottom: 0; left: 0; right: 0; height: 55%;
+    background: linear-gradient(transparent, rgba(0,0,0,0.88)); }
+  .image-text { position: absolute; bottom: 0; left: 0; right: 0; padding: 14px; cursor: pointer; }
+  .image-text p { font-size: 13px; color: rgba(255,255,255,0.65); line-height: 1.45; }
+
+  /* Video area */
+  .video-area { flex: 1; margin: 10px 16px 8px; border-radius: 10px; overflow: hidden;
+    position: relative; min-height: 0; background: #111; }
+  .video-placeholder { width: 100%; height: 100%; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; position: relative;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); }
+  .video-play { width: 64px; height: 64px; border-radius: 32px;
+    background: rgba(255,255,255,0.12); backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(255,255,255,0.08); z-index: 1; }
+  .video-play span { font-size: 26px; color: rgba(255,255,255,0.8); margin-left: 4px; }
+  .video-badge { position: absolute; top: 10px; left: 10px; z-index: 1;
+    font-size: 10px; color: rgba(255,255,255,0.4); font-family: monospace;
+    padding: 2px 8px; background: rgba(0,0,0,0.4); border-radius: 4px; }
+  .video-text { padding: 0 50px 14px 16px; flex-shrink: 0; cursor: pointer; }
+  .video-text p { font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.45; }
+  .video-iframe { width: 100%; height: 100%; border: none; }
+
+  /* Expandable */
+  .more-hint { color: rgba(255,255,255,0.5); }
+  .less-hint { font-size: 10px; color: rgba(255,255,255,0.35); display: block; margin-top: 4px; }
+
+  /* Connections */
+  .conn { display: flex; gap: 5px; margin-bottom: 3px; font-size: 11px; }
+  .conn-sym { font-family: monospace; flex-shrink: 0; }
+  .conn-text { color: rgba(255,255,255,0.5); }
+  .conn-id { font-family: monospace; font-size: 10px; color: rgba(255,255,255,0.4); }
+  .conn-bridge { color: rgba(255,255,255,0.35); }
+  .conn-reinforcement .conn-sym { color: rgba(120,220,160,0.8); }
+  .conn-challenge .conn-sym { color: rgba(255,170,100,0.8); }
+  .conn-bridge-type .conn-sym { color: rgba(190,175,255,0.8); }
+
+  /* Action bar */
+  .actions { position: absolute; right: 8px; z-index: 2;
+    display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .actions.bottom { bottom: 24px; }
+  .actions.middle { top: 50%; transform: translateY(-50%); }
+  .action-btn { background: rgba(255,255,255,0.06); border: none; cursor: pointer;
+    padding: 8px; border-radius: 50%; width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent; opacity: 0.6;
+    transition: all 0.15s; }
+  .action-btn.active { opacity: 1; transform: scale(1.1); background: rgba(255,255,255,0.1); }
+  .action-btn span { display: block; }
+
+  /* Counter */
+  .counter { position: absolute; top: 14px; right: 14px; z-index: 2;
+    font-size: 11px; color: rgba(255,255,255,0.4); font-family: monospace; }
+
+  /* Progress bar */
+  .progress { position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+    background: rgba(255,255,255,0.03); }
+  .progress-fill { height: 100%; background: rgba(255,255,255,0.12); transition: width 0.4s; }
+
+  /* Article reader */
+  .reader { position: fixed; inset: 0; z-index: 100; background: #000;
+    display: flex; flex-direction: column; animation: slideUp 0.3s ease-out; }
+  .reader-bar { padding: 10px 16px; display: flex; justify-content: space-between;
+    align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); flex-shrink: 0; }
+  .reader-url { font-size: 11px; color: rgba(255,255,255,0.45); font-family: monospace; }
+  .reader-close { background: none; border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 99px; padding: 4px 12px; cursor: pointer;
+    font-size: 11px; color: rgba(255,255,255,0.6); }
+  .reader iframe { flex: 1; border: none; background: #fff; }
+
+  /* End card */
+  .end-card { height: 100dvh; width: 100%; scroll-snap-align: start; background: #000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 40px; }
+  .end-check { width: 40px; height: 40px; border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.15); display: flex;
+    align-items: center; justify-content: center; margin-bottom: 16px; }
+  .end-title { font-size: 17px; font-weight: 500; color: rgba(255,255,255,0.75); margin-bottom: 4px; }
+  .end-stats { font-size: 11px; color: rgba(255,255,255,0.4); font-family: monospace; margin-bottom: 24px; }
+  .end-reactions { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
+    margin-bottom: 28px; font-size: 12px; color: rgba(255,255,255,0.5); }
+
+  /* Loading */
+  .loading { height: 100dvh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; }
+  .loading-text { color: rgba(255,255,255,0.3); font-family: monospace; font-size: 13px; }
+  .loading-sub { color: rgba(255,255,255,0.15); font-size: 11px; }
+
+  /* Swipe hint */
+  .swipe-hint { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: rgba(255,255,255,0.08); font-family: monospace;
+    animation: drift 2.5s ease-in-out infinite; pointer-events: none; z-index: 10; }
+
+  @keyframes drift { 0%,100% { opacity: .06; transform: translateX(-50%) translateY(0); }
+    50% { opacity: .18; transform: translateX(-50%) translateY(5px); } }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+const VALUE_CFG = {
+  project_relevance: { label: 'WORK', color: '#60a5fa' },
+  mental_model_update: { label: 'THINKING', color: '#fbbf24' },
+  serendipity: { label: 'DISCOVERY', color: '#c4b5fd' },
+  social_currency: { label: 'SOCIAL', color: '#6ee7b7' },
+  time_sensitivity: { label: 'URGENT', color: '#f87171' }
+};
+const CONN_SYMS = { reinforcement: '↻', challenge: '⚡', bridge: '⟷' };
+
+let reactions = {};
+let currentReader = null;
+
+// ── Organize items by interleaving value types ──
+function organize(items) {
+  const order = ['mental_model_update','project_relevance','serendipity','time_sensitivity','social_currency'];
+  const groups = {};
+  items.forEach(i => { const p = i.primary_value || 'none'; if (!groups[p]) groups[p] = []; groups[p].push(i); });
+  const result = [];
+  let idx = 0;
+  const active = order.filter(g => groups[g] && groups[g].length);
+  while (result.length < items.length) {
+    const g = active[idx % active.length];
+    if (groups[g] && groups[g].length) result.push(groups[g].shift());
+    idx++;
+    if (active.every(g => !groups[g] || !groups[g].length)) break;
+  }
+  return result;
+}
+
+// ── Render connections ──
+function renderConns(connections) {
+  if (!connections || !connections.length) return '';
+  return '<div class="connections">' + connections.map(c => {
+    const typeClass = c.type === 'reinforcement' ? 'conn-reinforcement' :
+                      c.type === 'challenge' ? 'conn-challenge' : 'conn-bridge-type';
+    const sym = CONN_SYMS[c.type] || '·';
+    const bridge = c.bridge_to ? `<span class="conn-bridge"> → ${c.bridge_to}</span>` : '';
+    const text = c.text ? ` ${c.text}` : '';
+    return `<div class="conn ${typeClass}">
+      <span class="conn-sym">${sym}</span>
+      <span class="conn-text"><span class="conn-id">${c.memory_id || '?'}</span>${bridge}${text}</span>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+// ── Build card header ──
+function cardHeader(item) {
+  const pv = item.primary_value || 'none';
+  const cfg = VALUE_CFG[pv] || { label: '?', color: '#666' };
+  const isCN = /[\u4e00-\u9fff]/.test(item.title);
+  const hasVideo = !!item.video_url;
+  const translated = item.translated_title ? `<div style="font-size:10px;color:rgba(255,255,255,0.45);margin-bottom:4px;font-family:monospace">${item.title}</div>` : '';
+  const displayTitle = item.translated_title || item.title || '';
+
+  return `<div class="card-header">
+    <div class="card-meta">
+      <span class="tag" style="color:${cfg.color}">${cfg.label}</span>
+      <span class="sep">·</span><span>${item.source_name || ''}</span>
+      <span class="sep">·</span><span>${item.published_at || ''}</span>
+      ${isCN ? '<span style="opacity:0.5">中</span>' : ''}
+      ${hasVideo ? '<span style="opacity:0.5">▶</span>' : ''}
+    </div>
+    ${translated}
+    <h1 class="card-title">${displayTitle}</h1>
+    <p class="card-rationale" style="color:${cfg.color}">${item.rationale || item.digest_tag || ''}</p>
+  </div>`;
+}
+
+// ── Build action bar ──
+function actionBar(id, position) {
+  const posClass = position === 'bottom' ? 'bottom' : 'middle';
+  return `<div class="actions ${posClass}" data-item-id="${id}">
+    <button class="action-btn" data-action="like" data-id="${id}" onclick="toggleReaction('${id}','like',this)">
+      <span style="font-size:22px;color:#ff6b81">♡</span></button>
+    <button class="action-btn" data-action="read" data-id="${id}" onclick="openReader('${id}')">
+      <span style="font-size:16px;color:#60a5fa">📄</span></button>
+    <button class="action-btn" data-action="save" data-id="${id}" onclick="toggleReaction('${id}','save',this)">
+      <span style="font-size:18px;color:#fbbf24">☆</span></button>
+    <button class="action-btn" data-action="share" data-id="${id}" onclick="toggleReaction('${id}','share',this)">
+      <span style="font-size:16px;color:#34d399">↗</span></button>
+    <button class="action-btn" data-action="connect" data-id="${id}" onclick="toggleReaction('${id}','connect',this)">
+      <span style="font-size:14px;font-family:monospace;font-weight:700;color:#a78bfa">⟷</span></button>
+    <button class="action-btn" data-action="react" data-id="${id}" onclick="toggleReaction('${id}','react',this)">
+      <span style="font-size:16px;color:#f9a8d4">💭</span></button>
+  </div>`;
+}
+
+// ── Build expandable content ──
+function expandable(item, mode) {
+  const summary = item.translated_summary || item.summary || '';
+  const conns = renderConns(item.connections);
+  const truncated = summary.slice(0, mode === 'image' ? 85 : 100);
+
+  return `<div class="expandable" onclick="toggleExpand(this)">
+    <div class="collapsed">
+      <p style="font-size:${mode === 'text' ? '15' : '13'}px;color:rgba(255,255,255,${mode === 'text' ? '0.7' : '0.6'});line-height:${mode === 'text' ? '1.72' : '1.45'};cursor:pointer">
+        ${mode === 'text' ? summary : truncated + '... <span class="more-hint">more</span>'}
+      </p>
+      ${mode === 'text' ? `<div style="margin-top:8px;cursor:pointer"><span style="font-size:11px;color:rgba(255,255,255,0.4);font-family:monospace">${(item.connections||[]).length} connection${(item.connections||[]).length!==1?'s':''} ↓</span></div>` : ''}
+    </div>
+    <div class="expanded" style="display:none">
+      ${mode !== 'text' ? `<p style="font-size:13px;color:rgba(255,255,255,0.7);line-height:1.55;margin-bottom:6px">${summary}</p>` : ''}
+      ${conns}
+      <span class="less-hint">less ↑</span>
+    </div>
+  </div>`;
+}
+
+// ── Card builders ──
+function textCard(item, idx, total) {
+  return `<div class="card" data-id="${item.id}">
+    <div class="counter">${idx+1}/${total}</div>
+    ${cardHeader(item)}
+    <div class="text-body">${expandable(item, 'text')}</div>
+    ${actionBar(item.id, 'middle')}
+    <div class="progress"><div class="progress-fill" style="width:${((idx+1)/total)*100}%"></div></div>
+  </div>`;
+}
+
+function imageCard(item, idx, total) {
+  return `<div class="card" data-id="${item.id}">
+    <div class="counter">${idx+1}/${total}</div>
+    ${cardHeader(item)}
+    <div class="image-area">
+      <div class="image-bg" style="background-image:url(${item.image_url})"></div>
+      <div class="image-gradient"></div>
+      <div class="image-text">${expandable(item, 'image')}</div>
+    </div>
+    ${actionBar(item.id, 'bottom')}
+    <div class="progress"><div class="progress-fill" style="width:${((idx+1)/total)*100}%"></div></div>
+  </div>`;
+}
+
+function videoCard(item, idx, total) {
+  const vtype = item.video_type || (item.video_url && item.video_url.includes('bilibili') ? 'bilibili' : 'youtube');
+  const badge = vtype === 'youtube' ? '▶ YouTube' : vtype === 'bilibili' ? '▶ Bilibili' : '▶ Video';
+
+  return `<div class="card" data-id="${item.id}">
+    <div class="counter">${idx+1}/${total}</div>
+    ${cardHeader(item)}
+    <div class="video-area" id="video-${item.id}">
+      <div class="video-placeholder" onclick="playVideo('${item.id}','${item.video_url}')">
+        <div class="video-badge">${badge}</div>
+        <div class="video-play"><span>▶</span></div>
+      </div>
+    </div>
+    <div class="video-text">${expandable(item, 'video')}</div>
+    ${actionBar(item.id, 'bottom')}
+    <div class="progress"><div class="progress-fill" style="width:${((idx+1)/total)*100}%"></div></div>
+  </div>`;
+}
+
+function endCard(total) {
+  return `<div class="end-card" id="end-card">
+    <div class="end-check"><span style="color:rgba(255,255,255,0.5);font-size:16px">✓</span></div>
+    <div class="end-title">Briefing complete</div>
+    <div class="end-stats" id="end-stats">${total} items · 0 reactions</div>
+    <div class="end-reactions" id="end-reactions"></div>
+  </div>`;
+}
+
+// ── Interactions ──
+let feedItems = [];
+
+function toggleReaction(id, type, btn) {
+  if (!reactions[id]) reactions[id] = [];
+  const idx = reactions[id].indexOf(type);
+  const span = btn.querySelector('span');
+  if (idx >= 0) {
+    reactions[id].splice(idx, 1);
+    btn.classList.remove('active');
+    // Reset to default
+    if (type === 'like') { span.textContent = '♡'; span.style.color = '#ff6b81'; }
+    if (type === 'save') { span.textContent = '☆'; span.style.color = '#fbbf24'; }
+    if (type === 'connect') span.style.color = '#a78bfa';
+    if (type === 'share') span.style.color = '#34d399';
+  } else {
+    reactions[id].push(type);
+    btn.classList.add('active');
+    // Brighten on active
+    if (type === 'like') { span.textContent = '♥'; span.style.color = '#ff4466'; }
+    if (type === 'save') { span.textContent = '★'; span.style.color = '#ffd700'; }
+    if (type === 'connect') span.style.color = '#c4b5fd';
+    if (type === 'share') span.style.color = '#6ee7b7';
+  }
+  updateEndCard();
+}
+
+function toggleExpand(el) {
+  const collapsed = el.querySelector('.collapsed');
+  const expanded = el.querySelector('.expanded');
+  if (expanded.style.display === 'none') {
+    collapsed.style.display = 'none';
+    expanded.style.display = 'block';
+  } else {
+    collapsed.style.display = 'block';
+    expanded.style.display = 'none';
+  }
+}
+
+function playVideo(id, url) {
+  const container = document.getElementById('video-' + id);
+  const separator = url.includes('?') ? '&' : '?';
+  container.innerHTML = `<iframe class="video-iframe" src="${url}${separator}autoplay=1"
+    allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture"
+    allowfullscreen></iframe>`;
+}
+
+function openReader(id) {
+  const item = feedItems.find(i => i.id === id);
+  if (!item || !item.url) return;
+
+  // Record read reaction
+  if (!reactions[id]) reactions[id] = [];
+  if (!reactions[id].includes('read')) reactions[id].push('read');
+  const btn = document.querySelector(`[data-action="read"][data-id="${id}"]`);
+  if (btn) { btn.classList.add('active'); btn.querySelector('span').style.color = '#60a5fa'; }
+
+  // Show reader
+  const reader = document.createElement('div');
+  reader.className = 'reader';
+  reader.id = 'article-reader';
+  reader.innerHTML = `<div class="reader-bar">
+    <span class="reader-url">${item.url.replace('https://','').slice(0,45)}...</span>
+    <button class="reader-close" onclick="closeReader()">✕ Close</button>
+  </div>
+  <iframe src="${item.url}" sandbox="allow-same-origin allow-scripts allow-popups"></iframe>`;
+  document.body.appendChild(reader);
+  updateEndCard();
+}
+
+function closeReader() {
+  const reader = document.getElementById('article-reader');
+  if (reader) reader.remove();
+}
+
+function updateEndCard() {
+  const counts = {};
+  let total = 0;
+  Object.values(reactions).forEach(arr => arr.forEach(r => { counts[r] = (counts[r]||0)+1; total++; }));
+
+  const statsEl = document.getElementById('end-stats');
+  if (statsEl) statsEl.textContent = `${feedItems.length} items · ${total} reactions`;
+
+  const rxEl = document.getElementById('end-reactions');
+  if (rxEl) {
+    let html = '';
+    if (counts.like) html += `<span>♥ ${counts.like}</span>`;
+    if (counts.read) html += `<span>📄 ${counts.read}</span>`;
+    if (counts.save) html += `<span>★ ${counts.save}</span>`;
+    if (counts.connect) html += `<span>⟷ ${counts.connect}</span>`;
+    if (counts.react) html += `<span>💭 ${counts.react}</span>`;
+    if (counts.share) html += `<span>↗ ${counts.share}</span>`;
+    rxEl.innerHTML = html;
+  }
+}
+
+// ── Main render ──
+async function init() {
+  const app = document.getElementById('app');
+  app.innerHTML = `<div class="loading">
+    <div class="loading-text">Loading briefing...</div>
+    <div class="loading-sub">Fetching scored-feed.json</div>
+  </div>`;
+
+  let feed;
+  try {
+    const resp = await fetch('/api/feed');
+    feed = await resp.json();
+    if (feed.error) throw new Error(feed.error);
+  } catch (e) {
+    app.innerHTML = `<div class="loading">
+      <div class="loading-text">No feed data</div>
+      <div class="loading-sub">${e.message || 'Run python run.py first'}</div>
+    </div>`;
+    return;
+  }
+
+  const digest = feed.digest || [];
+  if (!digest.length) {
+    app.innerHTML = `<div class="loading">
+      <div class="loading-text">Empty briefing</div>
+      <div class="loading-sub">No items in today's digest</div>
+    </div>`;
+    return;
+  }
+
+  feedItems = organize([...digest]);
+  const total = feedItems.length;
+
+  let html = '<div class="feed" id="feed">';
+  feedItems.forEach((item, i) => {
+    if (item.video_url) html += videoCard(item, i, total);
+    else if (item.image_url) html += imageCard(item, i, total);
+    else html += textCard(item, i, total);
+  });
+  html += endCard(total);
+  html += '</div>';
+
+  // Swipe hint
+  html += '<div class="swipe-hint" id="swipe-hint">↓</div>';
+
+  app.innerHTML = html;
+
+  // Track scroll for hiding swipe hint
+  const feedEl = document.getElementById('feed');
+  feedEl.addEventListener('scroll', () => {
+    const hint = document.getElementById('swipe-hint');
+    if (hint && feedEl.scrollTop > 50) hint.style.display = 'none';
+  }, { passive: true });
+
+  // Log
+  const arch = feed.architecture || '';
+  console.log(`Briefing loaded: ${total} items | ${arch}`);
+}
+
+// Go
+init();
+</script>
+</body>
+</html>
