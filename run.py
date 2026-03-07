@@ -41,13 +41,20 @@ def main():
 
     # ── Step 1: Build Profile ──
     print("Step 1: Building profile...")
-    from engine.profile_builder import main as build_profile
+    from engine.profile_builder import main as _build_profile_main
     # Run profile builder (it writes to output/profile.json)
     try:
         sys.argv = ["profile_builder.py"]  # Reset argv for sub-module
-        build_profile()
+        _build_profile_main()
     except SystemExit:
         pass
+
+    # Enrich profile with memory index for L2 connection analysis
+    try:
+        from engine.build_profile_wrapper import _enrich_profile_with_memory_index
+        _enrich_profile_with_memory_index()
+    except Exception as e:
+        print(f"  Note: Could not enrich memory index: {e}")
 
     if args.profile_only:
         print("\nProfile-only mode. Done.")

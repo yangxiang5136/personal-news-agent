@@ -174,13 +174,16 @@ Score ALL {len(items)} items."""
 # ---------------------------------------------------------------------------
 
 L2_SYSTEM = """You are a personal intelligence analyst. For each news item, analyze how it
-connects to the user's existing thinking (provided as scored memories).
+connects to the user's existing thinking (provided as scored memories with #ID references).
 
 For each item provide:
 - rationale: one specific sentence on why this matters to this person
-- connections: list of memory references this relates to
+- connections: list of memory references using the EXACT #IDs from the MEMORY INDEX provided
 - connection_type: reinforcement (confirms thinking), challenge (contradicts),
   or bridge (links two previously unlinked areas)
+
+CRITICAL: Use REAL memory IDs from the MEMORY INDEX (e.g. #1, #5, #14).
+Do NOT use "?" as a memory_id. If no memory connects, use an empty connections list.
 
 Challenge items should be flagged as HIGH VALUE — being contradicted is
 more cognitively valuable than being confirmed.
@@ -227,7 +230,9 @@ Return JSON:
   ]
 }}
 
-Analyze ALL {len(items)} items. Be specific — reference actual memories from the context."""
+Analyze ALL {len(items)} items. Use ONLY real #IDs from the MEMORY INDEX above.
+For bridge connections, specify which two memories are being bridged using their #IDs.
+If a news item doesn't connect to any specific memory, return an empty connections list."""
 
 
 # ---------------------------------------------------------------------------

@@ -58,3 +58,77 @@ def build_profile():
         pass
     finally:
         sys.argv = old_argv
+
+    # Enrich profile with memory index (so L2 scorer can reference real IDs)
+    _enrich_profile_with_memory_index()
+
+
+def _enrich_profile_with_memory_index():
+    """Add a memory_index to profile.json from the raw scores data."""
+    import json
+    import glob
+
+    profile_path = "output/profile.json"
+    if not os.path.exists(profile_path):
+        return
+
+    # Find scores file
+    scores_files = sorted(glob.glob("connections/scores-*.json"))
+    if not scores_files:
+        scores_files = sorted(glob.glob("data/scores-*.json"))
+    if not scores_files:
+        return
+
+    with open(scores_files[-1]) as f:
+        scores_data = json.load(f)
+
+    # Build compact memory index
+    memory_index = []
+    for i, mem in enumerate(scores_data.get("scored_memories", [])):
+        filename = mem.get("filename", "")
+        aspects = mem.get("aspects", {})
+
+        # Find top aspect and its memo
+        top_aspect = None
+        top_score = 0
+        top_memo = ""
+        for aspect_name, aspect_data in aspects.items():
+            score = aspect_data.get("score", 0)
+            if score > top_score:
+                top_score = score
+                top_aspect = aspect_name
+                top_memo = aspect_data.get("memo", "")
+
+        # Also collect all high-scoring aspects
+        strong_aspects = []
+        for aspect_name, aspect_data in aspects.items():
+            if aspect_data.get("score", 0) >= 0.6:
+                strong_aspects.append(aspect_name)
+
+        memory_index.append({
+            "id": f"#{i+1}",
+            "filename": filename,
+            "top_aspect": top_aspect,
+            "top_score": round(top_score, 2),
+            "memo": top_memo[:120],
+            "aspects": strong_aspects,
+        })
+
+    # Write back to profile
+    with open(profile_path) as f:
+        profile = json.load(f)
+
+    profile["memory_index"] = memory_index
+
+    # Also add memory index to scorer_context
+    if memory_index:
+        index_text = "\n\nSEAN'S MEMORY INDEX (reference by #ID):\n"
+        for m in memory_index:
+            aspects_str = ", ".join(m["aspects"]) if m["aspects"] else m["top_aspect"] or "?"
+            index_text += f"  {m['id']} [{aspects_str}] {m['memo']}\n"
+        profile["scorer_context"] = profile.get("scorer_context", "") + index_text
+
+    with open(profile_path, "w") as f:
+        json.dump(profile, f, indent=2, default=str)
+
+    print(f"    Enriched profile with {len(memory_index)} memory references")
