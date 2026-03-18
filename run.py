@@ -21,11 +21,266 @@ Usage:
 
 import os
 import sys
+import json
 import argparse
+import base64
+from datetime import datetime
 from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
+
+
+# ─── L1 score dimension mapping (0-10 internal → 0.0-1.0 digest) ─────
+
+L1_DIMENSION_MAP = {
+    "project_relevance": "relevance",
+    "mental_model_update": "novelty",
+    "serendipity": "actionability",
+    "social_currency": "timeliness",
+    "time_sensitivity": "source_quality",
+}
+
+# Map primary_value to suggested_category
+CATEGORY_MAP = {
+    "project_relevance": "Work",
+    "mental_model_update": "Thinking",
+    "serendipity": "Growth",
+    "social_currency": "World",
+    "time_sensitivity": "Urgent",
+}
+
+
+def _build_digest_json(feed):
+    """Transform scored-feed into the digest JSON format for the shared bus.
+
+    Follows the schema in docs/news-digest-format.md.
+    """
+    now = datetime.now()
+    all_items = feed.get("all_items", [])
+    digest_items = feed.get("digest", [])
+    digest_ids = set(item.get("id") for item in digest_items)
+
+    def _format_item(item):
+        """Convert one scored item to digest format."""
+        raw_scores = item.get("scores", {})
+        # Normalize 0-10 scores to 0.0-1.0
+        l1_scores = {
+            "relevance": round(raw_scores.get("project_relevance", 0) / 10.0, 2),
+            "novelty": round(raw_scores.get("mental_model_update", 0) / 10.0, 2),
+            "actionability": round(raw_scores.get("serendipity", 0) / 10.0, 2),
+            "timeliness": round(raw_scores.get("time_sensitivity", 0) / 10.0, 2),
+            "source_quality": round(raw_scores.get("social_currency", 0) / 10.0, 2),
+        }
+        l1_scores["composite"] = round(
+            sum(l1_scores.values()) / max(len(l1_scores), 1), 2
+        )
+
+        pv = item.get("primary_value", "")
+        category = CATEGORY_MAP.get(pv, "World")
+        tags = []
+        tag = item.get("digest_tag", "")
+        if tag:
+            tags = [t.strip() for t in tag.replace(",", " ").split() if t.strip()][:5]
+
+        # L2 analysis (only present for top items)
+        l2 = None
+        if item.get("rationale"):
+            connections = item.get("connections", [])
+            memory_ids = []
+            aspects_hit = []
+            is_surprise = False
+            for c in connections:
+                mid = c.get("memory_id", "")
+                if mid:
+                    memory_ids.append(mid)
+                if c.get("type") == "bridge":
+                    is_surprise = True
+
+            l2 = {
+                "connection_note": item.get("rationale", ""),
+                "memory_connections": memory_ids,
+                "rubric_aspects_hit": aspects_hit,
+                "surprise": is_surprise,
+                "deep_score": l1_scores["composite"],
+            }
+
+        source_lang = "en"
+        if item.get("source_system") == "rss_cn" or item.get("translated_title"):
+            source_lang = "zh"
+
+        return {
+            "id": item.get("id", 0),
+            "rank": item.get("rank"),
+            "title": item.get("title", ""),
+            "source": item.get("source_name", ""),
+            "source_lang": source_lang,
+            "url": item.get("url", ""),
+            "published_at": str(item.get("published_at", "")),
+            "l1_scores": l1_scores,
+            "suggested_category": category,
+            "theme_tags": tags,
+            "l2_analysis": l2,
+            "summary": item.get("summary", "")[:300] if l2 else None,
+            "nudge_line": item.get("rationale", "")[:200] if l2 else None,
+        }
+
+    # Format all items (ranked digest items + unranked L1-only items)
+    formatted_items = []
+    # Add digest items first (ranked)
+    for item in digest_items:
+        formatted_items.append(_format_item(item))
+    # Add remaining items (unranked)
+    for item in all_items:
+        if item.get("id") not in digest_ids:
+            formatted_items.append(_format_item(item))
+
+    digest_json = {
+        "metadata": {
+            "generated_at": now.isoformat() + "Z",
+            "pipeline_version": "1.0",
+            "cycle": "daily",
+            "items_fetched": feed.get("total_items", 0),
+            "items_after_l1": feed.get("l1_scored", 0),
+            "items_after_l2": feed.get("l2_analyzed", 0),
+            "items_ranked": feed.get("briefing_items", 0),
+            "feeds_succeeded": feed.get("_feeds_succeeded", 13),
+            "feeds_failed": feed.get("_feeds_failed", []),
+            "l1_model": feed.get("architecture", "deepseek-v3").split("|")[0].strip().split(":")[-1].strip() if feed.get("architecture") else "deepseek-v3",
+            "l2_model": feed.get("architecture", "claude-haiku").split("|")[-1].strip().split(":")[-1].strip() if feed.get("architecture") else "claude-haiku",
+            "web_view_url": "https://web-production-cb275.up.railway.app",
+        },
+        "items": formatted_items,
+    }
+
+    return digest_json
+
+
+def _push_digest_to_bus(digest_json, date_str):
+    """Push digest JSON to my-memories/news-digests/ via GitHub API.
+
+    Returns True on success, False on failure. Never raises.
+    """
+    token = os.getenv("GITHUB_TOKEN")
+    if not token:
+        print("[digest-push] No GITHUB_TOKEN — skipping bus push")
+        return False
+
+    try:
+        import requests
+    except ImportError:
+        try:
+            import urllib.request
+            import urllib.error
+        except ImportError:
+            print("[digest-push] No HTTP library available — skipping")
+            return False
+        return _push_digest_urllib(digest_json, date_str, token)
+
+    return _push_digest_requests(digest_json, date_str, token)
+
+
+def _push_digest_requests(digest_json, date_str, token):
+    """Push using requests library."""
+    import requests as req
+
+    repo = "yangxiang5136/my-memories"
+    path = "news-digests/news-digest-%s.json" % date_str
+    api_url = "https://api.github.com/repos/%s/contents/%s" % (repo, path)
+    headers = {
+        "Authorization": "token %s" % token,
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    content_bytes = json.dumps(digest_json, indent=2, default=str).encode("utf-8")
+    encoded = base64.b64encode(content_bytes).decode("utf-8")
+
+    print("[digest-push] Pushing %s to %s" % (path, repo))
+
+    # Check if file already exists (need sha to update)
+    sha = None
+    try:
+        resp = req.get(api_url, headers=headers)
+        if resp.status_code == 200:
+            sha = resp.json().get("sha")
+            print("[digest-push] File exists, updating (sha=%s)" % sha[:8])
+    except Exception:
+        pass
+
+    body = {
+        "message": "News digest %s" % date_str,
+        "content": encoded,
+        "branch": "main",
+    }
+    if sha:
+        body["sha"] = sha
+
+    try:
+        resp = req.put(api_url, headers=headers, json=body)
+        if resp.status_code in (200, 201):
+            print("[digest-push] SUCCESS — pushed %s" % path)
+            return True
+        else:
+            print("[digest-push] FAILED — status %d: %s" % (
+                resp.status_code, resp.text[:300]
+            ))
+            return False
+    except Exception as e:
+        print("[digest-push] EXCEPTION — %s" % e)
+        return False
+
+
+def _push_digest_urllib(digest_json, date_str, token):
+    """Push using urllib (fallback if requests not available)."""
+    import urllib.request
+    import urllib.error
+
+    repo = "yangxiang5136/my-memories"
+    path = "news-digests/news-digest-%s.json" % date_str
+    api_url = "https://api.github.com/repos/%s/contents/%s" % (repo, path)
+
+    content_bytes = json.dumps(digest_json, indent=2, default=str).encode("utf-8")
+    encoded = base64.b64encode(content_bytes).decode("utf-8")
+
+    print("[digest-push] Pushing %s to %s (urllib)" % (path, repo))
+
+    # Check if file exists
+    sha = None
+    try:
+        req = urllib.request.Request(api_url, headers={
+            "Authorization": "token %s" % token,
+            "Accept": "application/vnd.github.v3+json",
+        })
+        resp = urllib.request.urlopen(req)
+        data = json.loads(resp.read().decode("utf-8"))
+        sha = data.get("sha")
+    except Exception:
+        pass
+
+    body = {
+        "message": "News digest %s" % date_str,
+        "content": encoded,
+        "branch": "main",
+    }
+    if sha:
+        body["sha"] = sha
+
+    try:
+        payload = json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(api_url, data=payload, method="PUT", headers={
+            "Authorization": "token %s" % token,
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json",
+        })
+        resp = urllib.request.urlopen(req)
+        print("[digest-push] SUCCESS — pushed %s" % path)
+        return True
+    except urllib.error.HTTPError as e:
+        print("[digest-push] FAILED — HTTP %d: %s" % (e.code, e.read()[:300]))
+        return False
+    except Exception as e:
+        print("[digest-push] EXCEPTION — %s" % e)
+        return False
 
 
 def main():
@@ -33,6 +288,7 @@ def main():
     parser.add_argument("--profile-only", action="store_true", help="Only rebuild profile, don't score")
     parser.add_argument("--skip-cn", action="store_true", help="Skip Chinese feeds")
     parser.add_argument("--max-per-feed", type=int, default=10, help="Max items per feed")
+    parser.add_argument("--cycle", type=str, default=None, help="Cycle name for digest filename (e.g. morning, evening)")
     args = parser.parse_args()
 
     print("\n╔══════════════════════════════════════════════╗")
@@ -97,7 +353,6 @@ def main():
     print("Step 3: Two-tier scoring...")
     print("=" * 50)
 
-    import json
     from engine.scorer import TwoTierScorer
 
     with open("output/profile.json") as f:
@@ -112,7 +367,6 @@ def main():
         json.dump(feed, f, indent=2, default=str)
 
     # Also write a daily digest markdown
-    from datetime import datetime
     date_str = datetime.now().strftime("%Y-%m-%d")
     digest_dir = "output/news-digests"
     os.makedirs(digest_dir, exist_ok=True)
@@ -154,6 +408,24 @@ def main():
                     f.write(f"- {ctype}: {mid}{' → ' + bridge if bridge else ''}\n")
                 f.write("\n")
             f.write(f"[Read →]({url})\n\n---\n\n")
+
+    # ── Step 5: Push digest to shared bus ──
+    print("\n" + "=" * 50)
+    print("Step 5: Pushing digest to shared bus...")
+    print("=" * 50)
+
+    digest_json = _build_digest_json(feed)
+    # Override cycle name if provided
+    if args.cycle:
+        digest_json["metadata"]["cycle"] = args.cycle
+    digest_filename = date_str
+    if args.cycle:
+        digest_filename = "%s-%s" % (date_str, args.cycle)
+    push_ok = _push_digest_to_bus(digest_json, digest_filename)
+    if push_ok:
+        print("  Digest pushed to my-memories/news-digests/")
+    else:
+        print("  Digest push failed (non-fatal) — pipeline continues")
 
     # ── Print Summary ──
     print(f"\n{'━' * 55}")
