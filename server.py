@@ -22,6 +22,7 @@ import os
 import sys
 import threading
 import time
+import base64
 from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
@@ -119,6 +120,20 @@ def run_pipeline():
         pipeline_status["items_selected"] = feed.get("briefing_items", 0)
 
         print(f"\n  ✓ Pipeline complete: {feed.get('briefing_items', 0)} items selected from {feed.get('total_items', 0)}")
+
+        # Step 6: Push digest to shared bus (my-memories)
+        try:
+            from run import _build_digest_json, _push_digest_to_bus
+            digest_json = _build_digest_json(feed)
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            push_ok = _push_digest_to_bus(digest_json, date_str)
+            if push_ok:
+                print("  ✓ Digest pushed to my-memories/news-digests/")
+            else:
+                print("  ✗ Digest push failed (non-fatal)")
+        except Exception as e:
+            print(f"  ✗ Digest push error (non-fatal): {e}")
+
         return True
 
     except Exception as e:
