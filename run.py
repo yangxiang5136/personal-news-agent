@@ -333,22 +333,44 @@ def main():
     print("║   Personal News Agent — Daily Run                ║")
     print("╚══════════════════════════════════════════════╝\n")
 
+    # Detect Railway environment
+    railway_vars = {k: v for k, v in os.environ.items() if k.startswith("RAILWAY")}
+    is_railway = bool(railway_vars) or os.path.exists("/app/run.py")
+    print("  Railway env vars: %s" % (railway_vars if railway_vars else "(none)"))
+    print("  is_railway = %s" % is_railway)
+
     # ── Step 1: Build Profile ──
     print("Step 1: Building profile...")
-    from engine.profile_builder import main as _build_profile_main
-    # Run profile builder (it writes to output/profile.json)
-    try:
-        sys.argv = ["profile_builder.py"]  # Reset argv for sub-module
-        _build_profile_main()
-    except SystemExit:
-        pass
 
-    # Enrich profile with memory index for L2 connection analysis
-    try:
-        from engine.build_profile_wrapper import _enrich_profile_with_memory_index
-        _enrich_profile_with_memory_index()
-    except Exception as e:
-        print(f"  Note: Could not enrich memory index: {e}")
+    if is_railway:
+        # Railway: fetch data from GitHub, then build profile via wrapper
+        print("  [Railway mode] Fetching data from GitHub...")
+        from engine.github_fetcher import ensure_data
+        paths = ensure_data("data")
+        if not paths["scores_path"]:
+            print("  ERROR: No scored memories found (local or GitHub)")
+            sys.exit(1)
+        os.environ["SCORES_PATH"] = paths["scores_path"]
+        if paths["direction_path"]:
+            os.environ["DIRECTION_PATH"] = paths["direction_path"]
+        if paths["rubric_path"]:
+            os.environ["RUBRIC_PATH"] = paths["rubric_path"]
+        from engine.build_profile_wrapper import build_profile as _build_profile
+        _build_profile()
+    else:
+        # Local: call profile_builder directly (uses macOS paths)
+        from engine.profile_builder import main as _build_profile_main
+        try:
+            sys.argv = ["profile_builder.py"]  # Reset argv for sub-module
+            _build_profile_main()
+        except SystemExit:
+            pass
+        # Enrich profile with memory index for L2 connection analysis
+        try:
+            from engine.build_profile_wrapper import _enrich_profile_with_memory_index
+            _enrich_profile_with_memory_index()
+        except Exception as e:
+            print(f"  Note: Could not enrich memory index: {e}")
 
     if args.profile_only:
         print("\nProfile-only mode. Done.")
