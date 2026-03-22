@@ -4,9 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "python server.py",
-    "healthcheckPath": "/api/status",
-    "healthcheckTimeout": 30,
+    "startCommand": "python run.py",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
