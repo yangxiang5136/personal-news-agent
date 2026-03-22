@@ -163,17 +163,22 @@ def _push_digest_to_bus(digest_json, date_str):
     """
     token = os.getenv("GITHUB_TOKEN")
     if not token:
-        print("[digest-push] No GITHUB_TOKEN — skipping bus push")
+        print("[digest-push] ERROR: No GITHUB_TOKEN env var — skipping bus push")
         return False
+
+    print("[digest-push] Token present (%s...%s), %d items in digest" % (
+        token[:4], token[-4:], len(digest_json.get("items", []))
+    ))
 
     try:
         import requests
     except ImportError:
+        print("[digest-push] requests not available, trying urllib")
         try:
             import urllib.request
             import urllib.error
         except ImportError:
-            print("[digest-push] No HTTP library available — skipping")
+            print("[digest-push] ERROR: No HTTP library available — skipping")
             return False
         return _push_digest_urllib(digest_json, date_str, token)
 
@@ -200,12 +205,23 @@ def _push_digest_requests(digest_json, date_str, token):
     # Check if file already exists (need sha to update)
     sha = None
     try:
+        print("[digest-push] GET %s" % api_url)
         resp = req.get(api_url, headers=headers, timeout=30)
+        print("[digest-push] GET status=%d" % resp.status_code)
         if resp.status_code == 200:
             sha = resp.json().get("sha")
             print("[digest-push] File exists, updating (sha=%s)" % sha[:8])
-    except Exception:
-        pass
+        elif resp.status_code == 404:
+            print("[digest-push] File does not exist yet — will create")
+        elif resp.status_code == 401:
+            print("[digest-push] ERROR: 401 Unauthorized — GITHUB_TOKEN may be expired or lack repo access")
+        elif resp.status_code == 403:
+            print("[digest-push] ERROR: 403 Forbidden — rate limit or token permissions issue")
+            print("[digest-push] Response: %s" % resp.text[:300])
+        else:
+            print("[digest-push] Unexpected GET status %d: %s" % (resp.status_code, resp.text[:200]))
+    except Exception as e:
+        print("[digest-push] GET exception (non-fatal): %s" % e)
 
     body = {
         "message": "News digest %s" % date_str,
@@ -216,17 +232,37 @@ def _push_digest_requests(digest_json, date_str, token):
         body["sha"] = sha
 
     try:
+        content_size = len(json.dumps(body).encode("utf-8"))
+        print("[digest-push] PUT %s (%d bytes, sha=%s)" % (api_url, content_size, sha or "none"))
         resp = req.put(api_url, headers=headers, json=body, timeout=30)
+        print("[digest-push] PUT status=%d" % resp.status_code)
         if resp.status_code in (200, 201):
             print("[digest-push] SUCCESS — pushed %s" % path)
             return True
+        elif resp.status_code == 409:
+            print("[digest-push] CONFLICT (409) — file changed since GET. Retrying with fresh sha...")
+            # Retry once with fresh sha
+            try:
+                r2 = req.get(api_url, headers=headers, timeout=30)
+                if r2.status_code == 200:
+                    body["sha"] = r2.json().get("sha")
+                    r3 = req.put(api_url, headers=headers, json=body, timeout=30)
+                    if r3.status_code in (200, 201):
+                        print("[digest-push] SUCCESS on retry")
+                        return True
+                    print("[digest-push] Retry also failed: %d" % r3.status_code)
+            except Exception as e2:
+                print("[digest-push] Retry exception: %s" % e2)
+            return False
+        elif resp.status_code == 422:
+            print("[digest-push] VALIDATION ERROR (422) — may need sha for existing file")
+            print("[digest-push] Response: %s" % resp.text[:400])
+            return False
         else:
-            print("[digest-push] FAILED — status %d: %s" % (
-                resp.status_code, resp.text[:300]
-            ))
+            print("[digest-push] FAILED — status %d: %s" % (resp.status_code, resp.text[:400]))
             return False
     except Exception as e:
-        print("[digest-push] EXCEPTION — %s" % e)
+        print("[digest-push] PUT EXCEPTION — %s" % e)
         return False
 
 
@@ -247,6 +283,7 @@ def _push_digest_urllib(digest_json, date_str, token):
     # Check if file exists
     sha = None
     try:
+        print("[digest-push] GET %s (urllib)" % api_url)
         req = urllib.request.Request(api_url, headers={
             "Authorization": "token %s" % token,
             "Accept": "application/vnd.github.v3+json",
@@ -254,8 +291,9 @@ def _push_digest_urllib(digest_json, date_str, token):
         resp = urllib.request.urlopen(req, timeout=30)
         data = json.loads(resp.read().decode("utf-8"))
         sha = data.get("sha")
-    except Exception:
-        pass
+        print("[digest-push] File exists, sha=%s" % sha[:8])
+    except Exception as e:
+        print("[digest-push] GET exception (non-fatal): %s" % e)
 
     body = {
         "message": "News digest %s" % date_str,
@@ -414,18 +452,31 @@ def main():
     print("Step 5: Pushing digest to shared bus...")
     print("=" * 50)
 
-    digest_json = _build_digest_json(feed)
-    # Override cycle name if provided
-    if args.cycle:
-        digest_json["metadata"]["cycle"] = args.cycle
-    digest_filename = date_str
-    if args.cycle:
-        digest_filename = "%s-%s" % (date_str, args.cycle)
-    push_ok = _push_digest_to_bus(digest_json, digest_filename)
-    if push_ok:
-        print("  Digest pushed to my-memories/news-digests/")
+    try:
+        digest_json = _build_digest_json(feed)
+        print("  Built digest: %d items, metadata keys: %s" % (
+            len(digest_json.get("items", [])),
+            ", ".join(digest_json.get("metadata", {}).keys())
+        ))
+    except Exception as e:
+        print("  ERROR building digest JSON: %s" % e)
+        import traceback; traceback.print_exc()
+        digest_json = None
+
+    if digest_json:
+        # Override cycle name if provided
+        if args.cycle:
+            digest_json["metadata"]["cycle"] = args.cycle
+        digest_filename = date_str
+        if args.cycle:
+            digest_filename = "%s-%s" % (date_str, args.cycle)
+        push_ok = _push_digest_to_bus(digest_json, digest_filename)
+        if push_ok:
+            print("  Digest pushed to my-memories/news-digests/")
+        else:
+            print("  ERROR: Digest push FAILED — check logs above for details")
     else:
-        print("  Digest push failed (non-fatal) — pipeline continues")
+        print("  ERROR: No digest to push (build failed)")
 
     # ── Print Summary ──
     print(f"\n{'━' * 55}")
