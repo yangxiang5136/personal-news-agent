@@ -200,7 +200,7 @@ def _push_digest_requests(digest_json, date_str, token):
     # Check if file already exists (need sha to update)
     sha = None
     try:
-        resp = req.get(api_url, headers=headers)
+        resp = req.get(api_url, headers=headers, timeout=30)
         if resp.status_code == 200:
             sha = resp.json().get("sha")
             print("[digest-push] File exists, updating (sha=%s)" % sha[:8])
@@ -216,7 +216,7 @@ def _push_digest_requests(digest_json, date_str, token):
         body["sha"] = sha
 
     try:
-        resp = req.put(api_url, headers=headers, json=body)
+        resp = req.put(api_url, headers=headers, json=body, timeout=30)
         if resp.status_code in (200, 201):
             print("[digest-push] SUCCESS — pushed %s" % path)
             return True
@@ -251,7 +251,7 @@ def _push_digest_urllib(digest_json, date_str, token):
             "Authorization": "token %s" % token,
             "Accept": "application/vnd.github.v3+json",
         })
-        resp = urllib.request.urlopen(req)
+        resp = urllib.request.urlopen(req, timeout=30)
         data = json.loads(resp.read().decode("utf-8"))
         sha = data.get("sha")
     except Exception:
@@ -272,7 +272,7 @@ def _push_digest_urllib(digest_json, date_str, token):
             "Accept": "application/vnd.github.v3+json",
             "Content-Type": "application/json",
         })
-        resp = urllib.request.urlopen(req)
+        resp = urllib.request.urlopen(req, timeout=30)
         print("[digest-push] SUCCESS — pushed %s" % path)
         return True
     except urllib.error.HTTPError as e:
@@ -466,3 +466,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    sys.exit(0)

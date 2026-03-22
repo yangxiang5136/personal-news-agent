@@ -74,7 +74,13 @@ class RSSAdapter:
         return items
 
     def _fetch_feed(self, url, max_items):
-        feed = feedparser.parse(url)
+        import socket
+        old_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(20)  # 20s per feed
+        try:
+            feed = feedparser.parse(url)
+        finally:
+            socket.setdefaulttimeout(old_timeout)
         feed_name = feed.feed.get("title", url.split("/")[2])
         items = []
 

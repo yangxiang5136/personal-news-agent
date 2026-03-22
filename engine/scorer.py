@@ -64,7 +64,7 @@ class LLMClient:
         if provider == "anthropic":
             try:
                 from anthropic import Anthropic
-                self.client = Anthropic(api_key=api_key)
+                self.client = Anthropic(api_key=api_key, timeout=120.0)
             except ImportError:
                 print("  pip install anthropic --break-system-packages")
                 sys.exit(1)
@@ -72,7 +72,7 @@ class LLMClient:
             # OpenAI-compatible (DeepSeek, MiniMax, GLM, etc.)
             try:
                 from openai import OpenAI
-                self.client = OpenAI(api_key=api_key, base_url=base_url)
+                self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0)
             except ImportError:
                 print("  pip install openai --break-system-packages")
                 sys.exit(1)
